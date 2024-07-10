@@ -1,9 +1,10 @@
-from .models import Post
 from django.shortcuts import get_object_or_404, render
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.views.decorators.http import require_POST
 from django.views.generic import ListView
 from django.core.mail import send_mail
-from .forms import EmailPostForm
+from .forms import CommentForm, EmailPostForm
+from .models import Post
 
 
 def post_list(request):
@@ -33,11 +34,24 @@ def post_detail(request, year, month, day, post):
         publish__year=year,
         publish__month=month,
         publish__day=day)
+
+    # Список активних коментарів
+    comments = post.comments.filter(active=True)
+    # Форма для коментування користувачами
+    form = CommentForm()
+
     return render(
         request,
 'blog/post/detail.html',
-    {'post': post}
+    {
+        'post': post,
+        'comments': comments,
+        'form': form
+
+        }
     )
+
+
 
 class PostListView(ListView):
     """
@@ -91,5 +105,32 @@ def post_share(request, post_id):
             'post': post,
             'form': form,
             'sent': sent
+        }
+    )
+
+@require_POST
+def post_comment(request, post_id):
+    post = get_object_or_404(
+        Post,
+        id=post_id,
+        status=Post.Status.PUBLISHED
+    )
+    comment = None
+    # Коментар був надісланий
+    form = CommentForm(data=request.POST)
+    if form.is_valid():
+        # Створити об"єкт класу Сomment, не зберігаючи в базу
+        comment = form.save(commit=False)
+        # Призначити пост коментарю
+        comment.post = post
+        # Зберегти коментар в базі
+        comment.save()
+    return render(
+        request,
+        'blog/post/comment.html',
+        {
+            'post': post,
+            'form': form,
+            'comment': comment
         }
     )
